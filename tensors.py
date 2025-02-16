@@ -1,4 +1,5 @@
 from functools import reduce
+from itertools import starmap
 import operator
 from random import random
 
@@ -16,17 +17,20 @@ def length_check(func):
 
 # dataclass?
 class Vector:
+    __slots__ = ['values', '_len']
+
     def __init__(self, values: list):
         self.values = values
+        self._len = len(values)
 
     def __len__(self) -> int:
-        return len(self.values)
-
-    def shape(self) -> tuple[int, int]:  # Easier for shape checking with matrices
-        return (1, len(self))
+        return self._len
 
     def __getitem__(self, i) -> int | float:
         return self.values[i]
+
+    def __iter__(self):
+        return self.values.__iter__()
 
     def transpose(self):
         a = Matrix([[x] for x in self.values])
@@ -112,8 +116,8 @@ def shape_check(func):
         if not isinstance(args[1], Matrix):  # Vector +-/* int or float
             return func(*args, **kwargs)
 
-        if args[0].shape() != args[1].shape():
-            raise Exception(f"Tried to get the dot product of differently shaped matrices ({args[0].shape(), args[1].shape()}).")
+        if args[0].shape != args[1].shape:
+            raise Exception(f"Tried to get the dot product of differently shaped matrices ({args[0].shape, args[1].shape}).")
         
         return func(*args, **kwargs)
     return wrapper
@@ -123,15 +127,17 @@ def matrix_mul(self, other):  # Kinda messy, but better than duplication for edg
     if not isinstance(other, Matrix):
         return Matrix([x * other for x in self])
 
-    if self.shape()[0] != other.shape()[1]:
-        raise Exception(f"Tried to multiply matrices of unsupported shapes ({self.shape()}, {other.shape()})")
+    if self.shape[0] != other.shape[1]:
+        raise Exception(f"Tried to multiply matrices of unsupported shapes ({self.shape}, {other.shape})")
 
     other_tp = other.transpose()
-    return Matrix([[x.dotprod(y) for y in other_tp.values] for x in self.values])
+    return Matrix([[x.dotprod(y) for y in other_tp] for x in self])
 
 
 # IMPORTANT: values is a list of rows, so len(val) = n_rows and len(val[0]) = n_cols.
 class Matrix:
+    __slots__ = ['values', 'shape']
+
     def __new__(cls, values):  # 1 row matrix -> vector coercion.
         if len(values) == 1:
             return Vector(values[0])
@@ -141,25 +147,25 @@ class Matrix:
         if any(len(values[0]) != len(values[i]) for i in range(1, len(values))):
             raise ValueError(f"Mismatching rows lengths for matrix ({[len(x) for x in values]}).")
         self.values = [Vector(row) if not isinstance(row, Vector) else row for row in values]
-    
-    def shape(self) -> tuple[int, int]:
-        return len(self.values), len(self.values[0])
+        self.shape = (len(self.values), len(values[0]))
 
     def __getitem__(self, i) -> Vector:
         return self.values[i]
 
+    def __iter__(self):
+        return self.values.__iter__()
     @staticmethod
     def random(n_rows: int, n_cols) -> "Vector":
         return Matrix([[0 for _ in range(n_cols)] for _ in range(n_rows)])
 
     def copy(self) -> "Matrix":
-        return Matrix(*[x.copy() for x in self.values])
+        return Matrix(*[x.copy() for x in self])
 
     def transpose(self) -> "Matrix":
-        return Matrix([list(x) for x in zip(*self.values)])
+        return Matrix([list(x) for x in zip(*self)])
     
     def determinant(self) -> float:
-        n_rows, n_cols = self.shape()
+        n_rows, n_cols = self.shape
 
         if n_rows != n_cols:
             raise Exception("Determinants are only supported for square matrices.")
@@ -182,7 +188,7 @@ class Matrix:
     @shape_check
     def _element_wise_operation(self, other, operand) -> "Matrix":
         if isinstance(other, Matrix):
-            return Matrix([operand(self[i], other[i]) for i in range(self.shape()[0])])
+            return Matrix([operand(self[i], other[i]) for i in range(self.shape[0])])
                          
         return Matrix([operand(x, other) for x in self])
 
@@ -208,23 +214,23 @@ class Matrix:
 
     def __mul__(self, other):
         if isinstance(other, Vector):  # Treat as row vector
-            return Matrix([Vector([row.unwrap() * x for x in other.values]) for row in self.values])
+            return Matrix([Vector([row.unwrap() * x for x in other]) for row in self])
 
             # Treat vector as column vector (Nx1)
-            if self.shape()[1] != len(other):
-                raise Exception(f"Incompatible shapes for matrix-vector multiplication: {self.shape()} and {len(other)}")
-            return Vector([row.dotprod(other) for row in self.values])
+            if self.shape[1] != len(other):
+                raise Exception(f"Incompatible shapes for matrix-vector multiplication: {self.shape} and {len(other)}")
+            return Vector([row.dotprod(other) for row in self])
         return matrix_mul(self, other)
 
     def __rmul__(self, other):
         if isinstance(other, Vector):
             # Treat vector as 1xN matrix multiplying an NxM matrix
-            return Vector([sum(other[i] * self.values[i][j] for i in range(len(other))) 
-                          for j in range(len(self.values[0]))])
+            return Vector([sum(other[i] * self[i][j] for i in range(len(other))) 
+                          for j in range(len(self[0]))])
         return matrix_mul(other, self)
 
     def __repr__(self):
-        return "\n".join(str(x) for x in self.values)
+        return "\n".join(str(x) for x in self)
 
     def hadamard(self, other) -> "Matrix":
         return self._element_wise_operation(self, other, operator.mul)
