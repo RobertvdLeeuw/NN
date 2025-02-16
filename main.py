@@ -106,20 +106,6 @@ layer_sizes = [2, 3, 1]  # 2 inputs, 3 hidden, 1 output
 activation_funcs = [Identity, ReLU, Sigmoid]  # Assuming you have these classes defined
 alpha = 0.1
 
-# Test input and expected output
-x = Vector([0.5, 0.8])  # Input vector~/nc/Education/Fontys/S7 AI/personal/ANN  > python3 main.py
-[0.4378235405048922]
-[0.37026319480164366]
-[0.30028185298146837]
-[0.23222055878971232]
-[0.17083735538286457]
-[0.11980422445601822]
-[0.08058811715516714]
-[0.052446557950366186]
-[0.03331499719962121]
-[0.02081172903401356]
-y = Vector([1.0])       # Target output
-
 nn = ANN(layer_sizes, activation_funcs, alpha)
 
 for _ in range(10):
