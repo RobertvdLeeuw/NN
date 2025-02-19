@@ -18,7 +18,7 @@ class Function:
         return Vector([self.deriv(x) for x in data])
 
 class ANN:
-    def __init__(self, layer_sizes: list[int], activation_funcs: list[Function], alpha: float, endlabels: list[str] = None):
+    def __init__(self, layer_sizes: list[int], activation_funcs: list[Function], alpha: float, endlabels: list = None):
         self.weights = [Matrix.random(x, y) for x, y in zip(layer_sizes[:-1], layer_sizes[1:])]
         self.biases = [Vector.random(x) for x in layer_sizes[1:]]
         self.activation_funcs = activation_funcs
@@ -39,13 +39,13 @@ class ANN:
         biases_str = "\n".join(f"{b}\n" for b in self.biases)
         return f"Weights:\n{weights_str}\n\nBiases:\n{biases_str}\n"
 
-    def train(self, features: list[Vector], labels: list[Vector]):
+    def train(self, features: list[Vector], labels: list[Vector], interval_k: int = 1000):
         for f, l in zip(features, labels):
-            pred = self.predict(f)
-            self.correct(f, l, len(features))
+            _ = self.predict(f)
+            self.correct(l, len(features))
             self._epoch_counter += 1
 
-            if self._epoch_counter % 1000 == 0:
+            if self._epoch_counter % interval_k == 0:
                 print(f"Training at {self._epoch_counter} epochs.")
 
     def predict(self, features: Vector) -> list | dict:
@@ -65,7 +65,7 @@ class ANN:
 
         return dict(zip(self.endlabels, A)) if self.endlabels else A
 
-    def correct(self, features: Vector, labels: Vector, n: int):
+    def correct(self, labels: Vector, n: int):
         # Start with output layer error
         z_partials = [self.last_run_A[-1] - labels]  # z_L = A_L - Y
         
@@ -111,43 +111,44 @@ Identity = Function(name="Identity",
                     func=lambda x: x,
                     derivative=lambda x: 1)
 
-layer_sizes = [4, 5, 3]  # 2 inputs, 3 hidden, 1 output
-
-activation_funcs = [Identity, ReLU, Sigmoid]  # Assuming you have these classes defined
-alpha = 0.0001
+layer_sizes = [11, 11, 6]
+activation_funcs = [Identity, ReLU, Sigmoid]
+alpha = 0.16
 
 # Load CSV
 features, labels = [], []
-species = ['setosa', 'versicolor', 'virginica']
-with open('iris.csv', 'r') as f:
+qualities = list(range(3, 9))
+with open('WineQT.csv', 'r') as f:
     for line in f.readlines()[1:]:
-        *feat, label = line.split(',')
+        *feat, label, _ = line.split(',')
+
         features.append(Vector([float(f) for f in feat]))
-        labels.append(Vector([float(label.strip() == s) for s in species]))
+        labels.append(Vector([float(int(label) == q) for q in qualities]))
+
 
 from sklearn.model_selection import train_test_split
-training_features, testing_features, training_labels, testing_labels = train_test_split(features, labels, 
-                                                                                        random_state=104,  
-                                                                                        test_size=0.15,  
-                                                                                        shuffle=True) 
+training_features, testing_features, training_labels, testing_labels = train_test_split(features, labels,
+                                                                                        random_state=1,
+                                                                                        test_size=0.15,
+                                                                                        shuffle=True)
 
-nn = ANN(layer_sizes, activation_funcs, alpha, endlabels=species)
+nn = ANN(layer_sizes, activation_funcs, alpha, endlabels=qualities)
 nn.train(training_features, training_labels)
+
 
 def argmax_label(d: dict) -> str:
     # return the key of which the value is highest of all values
     return [label for label in d if d[label] == max(d.values())][0]
 
-    for label in d:
-        if d[label] == max(d.values()):
-            return label
 
 correct = 0
 for f, l in zip(testing_features, testing_labels):
     output = nn.predict(f)
     pred = max(output.keys(), key=lambda k: output[k])
-    
-    correct += pred == label.strip()
+    label = float(max(range(3, 9), key=lambda x: l[x-3]))
+
+    correct += pred == label
 
 print(f"SCORE:{correct / len(testing_features) * 100:2f}%")
 
+# MSE and such

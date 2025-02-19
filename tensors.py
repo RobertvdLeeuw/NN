@@ -1,5 +1,3 @@
-from functools import reduce
-from itertools import starmap
 import operator
 from random import random
 
@@ -41,7 +39,7 @@ class Vector:
     
     @staticmethod
     def random(length: int) -> "Vector":
-        return Vector([0 for _ in range(length)])
+        return Vector([random() for _ in range(length)])
         # return Vector([random() for _ in range(length)])
 
     def dotprod(self, other) -> int:
