@@ -17,6 +17,7 @@ class Function:
     def compute_deriv(self, data: Vector) -> Vector:
         return Vector([self.deriv(x) for x in data])
 
+
 class ANN:
     def __init__(self, layer_sizes: list[int], activation_funcs: list[Function], alpha: float, endlabels: list = None):
         self.weights = [Matrix.random(x, y) for x, y in zip(layer_sizes[:-1], layer_sizes[1:])]
@@ -27,6 +28,7 @@ class ANN:
 
         self.last_run_z = None  # Saved for backprop.
         self.last_run_A = None  # Saved for backprop.
+        self.MSEs = None
 
         self._epoch_counter = 0
 
@@ -39,10 +41,14 @@ class ANN:
         biases_str = "\n".join(f"{b}\n" for b in self.biases)
         return f"Weights:\n{weights_str}\n\nBiases:\n{biases_str}\n"
 
-    def train(self, features: list[Vector], labels: list[Vector], interval_k: int = 1000):
+    def train(self, features: list[Vector], labels: list[Vector], interval_k: int = 1000) -> dict:
+        self.MSEs = []
+
+        n = len(features)
         for f, l in zip(features, labels):
             _ = self.predict(f)
-            self.correct(l, len(features))
+
+            self.correct(l, n)
             self._epoch_counter += 1
 
             if self._epoch_counter % interval_k == 0:
@@ -52,8 +58,7 @@ class ANN:
         self.last_run_z = []
         self.last_run_A = []
         z = features
-        A = None
-        
+
         for weights, biases, activ, in zip(self.weights, self.biases, self.activation_funcs):
             A = activ.compute(z)
             z = A * weights + biases
@@ -67,45 +72,46 @@ class ANN:
 
     def correct(self, labels: Vector, n: int):
         # Start with output layer error
-        z_partials = [self.last_run_A[-1] - labels]  # z_L = A_L - Y
-        
+        e = self.last_run_A[-1] - labels
+        self.MSEs.append(e * e.transpose() / n)
+
+        z_partials = [e]  # z_L = A_L - Y
+
         # Compute z_partials backwards through layers
-        for i in range(len(self.weights)-1, 0, -1):  # Go from L-1 to 1
-            z = self.last_run_z[i-1]  # Get z for current layer
+        for i in range(len(self.weights) - 1, 0, -1):  # Go from L-1 to 1
+            z = self.last_run_z[i - 1]  # Get z for current layer
             weights = self.weights[i]  # Get weights for next layer
             activ = self.activation_funcs[i]  # Get activation for current layer
 
-            # print(f"--- {z}, {activ.name} \n{weights}\n\n")
-            
             # Calculate partial using the formula: (∂z_{l+1} · W_{l+1}^T) ⊙ f'(z_l)
             z_partial = (z_partials[-1] * weights.transpose()).hadamard(activ.compute_deriv(z))
             z_partials.append(z_partial)
-        
+
         z_partials = list(reversed(z_partials))
 
         # Calculate weight partials using A_{l-1}^T · ∂z_l
         w_partials = [A.transpose() * z_p / n for A, z_p in zip(self.last_run_A, z_partials)]
-        
+
         # Calculate bias partials
         b_partials = [z / n for z in z_partials]
-        
+
         # Update weights and biases
         self.weights = [w - w_p * self.alpha for w, w_p in zip(self.weights, w_partials)]
         self.biases = [b - b_p * self.alpha for b, b_p in zip(self.biases, b_partials)]
 
     def save_parameters(self, name: str):
         pass
-                
-    
+
+
 ReLU = Function(name="ReLU",
                 func=lambda x: x if x > 0 else 0,
                 derivative=lambda x: int(x > 0))
 
 e = 2.71828
-sig = lambda x:1/(1+e**(-x)) 
+sig = lambda x: 1 / (1 + e ** (-x))
 Sigmoid = Function(name="Sigmoid",
                    func=sig,
-                   derivative=lambda x: sig(x) * (1-sig(x)))
+                   derivative=lambda x: sig(x) * (1 - sig(x)))
 
 Identity = Function(name="Identity",
                     func=lambda x: x,
@@ -125,8 +131,8 @@ with open('WineQT.csv', 'r') as f:
         features.append(Vector([float(f) for f in feat]))
         labels.append(Vector([float(int(label) == q) for q in qualities]))
 
-
 from sklearn.model_selection import train_test_split
+
 training_features, testing_features, training_labels, testing_labels = train_test_split(features, labels,
                                                                                         random_state=1,
                                                                                         test_size=0.15,
@@ -145,10 +151,14 @@ correct = 0
 for f, l in zip(testing_features, testing_labels):
     output = nn.predict(f)
     pred = max(output.keys(), key=lambda k: output[k])
-    label = float(max(range(3, 9), key=lambda x: l[x-3]))
+    label = float(max(range(3, 9), key=lambda x: l[x - 3]))
 
     correct += pred == label
 
 print(f"SCORE:{correct / len(testing_features) * 100:2f}%")
 
 # MSE and such
+from pprint import pprint
+
+pprint(nn.MSEs[0])
+pprint(nn.MSEs[-1])
