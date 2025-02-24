@@ -2,6 +2,10 @@ import operator
 from random import random
 
 
+def cartprod(x, y):
+    return [(a, b) for a in x for b in y]
+
+
 def length_check(func):
     def wrapper(*args, **kwargs):
         if not isinstance(args[1], Vector):  # Vector +-/* int or float
@@ -13,9 +17,20 @@ def length_check(func):
         return func(*args, **kwargs)
     return wrapper
 
-# dataclass?
+    
+def round_number(x: float, n_digits: int) -> str:
+    if x.is_integer():
+        return str(x)
+
+    if len(str(x).split(".")[1]) > n_digits:
+        return str(round(x, n_digits)) + "…"
+        
+    return str(x)
+    
+
 class Vector:
     __slots__ = ['values', '_len']
+    n_digits_clamp = 4
 
     def __init__(self, values: list):
         self.values = values
@@ -38,12 +53,11 @@ class Vector:
         return Vector(self.values)
     
     @staticmethod
-    def random(length: int) -> "Vector":
-        return Vector([random() for _ in range(length)])
-        # return Vector([random() for _ in range(length)])
+    def random(n: int) -> "Vector":
+        return Vector([random() for _ in range(n)])
 
     def dotprod(self, other) -> int:
-        if len(self) == 1:
+        if len(self) == 1:            
             return other * self[0]  # Handling it as matrix multiplication.
 
         if len(self) != len(other):
@@ -65,6 +79,10 @@ class Vector:
             raise Exception("Tried to unwrap vector of length", len(self))
 
         return self[0]
+
+    @staticmethod
+    def filled(val: float, n: int) -> "Vector":
+        return Vector([val] * n)
 
     @length_check
     def _element_wise_operation(self, other, operand) -> "Vector":
@@ -103,10 +121,20 @@ class Vector:
         return self * other
 
     def __repr__(self):
-        return str(self.values)
+        return "[" +  ", ".join([round_number(x, Vector.n_digits_clamp) for x in self]) + "]"
+        
+    def __abs__(self) -> "Vector":
+        return Vector([abs(x) for x in self])
+        
+    def sum(self) -> float:
+        return sum(self.values)
 
     def hadamard(self, other) -> "Vector":
         return self._element_wise_operation(other, operator.mul)
+
+    def pad(self, n: int, val: float = 0.0) -> "Vector":
+        padding = [val] * n
+        return Vector(padding + self.values + padding)
 
 
 def shape_check(func):
@@ -152,9 +180,10 @@ class Matrix:
 
     def __iter__(self):
         return self.values.__iter__()
+
     @staticmethod
-    def random(n_rows: int, n_cols) -> "Vector":
-        return Matrix([[0 for _ in range(n_cols)] for _ in range(n_rows)])
+    def random(n_rows: int, n_cols: int) -> "Vector":
+        return Matrix([Vector.random(n_cols) for _ in range(n_rows)])
 
     def copy(self) -> "Matrix":
         return Matrix(*[x.copy() for x in self])
@@ -182,6 +211,10 @@ class Matrix:
             return self[0][j] * ((-1) ** j) * Matrix(minor).determinant()
         
         return sum(cofactor(j) for j in range(n_cols))
+
+    @staticmethod
+    def filled(val: float, n_rows: int, n_cols: int) -> "Matrix":
+        return Matrix([Vector([val] * n_cols)] * n_rows)
 
     @shape_check
     def _element_wise_operation(self, other, operand) -> "Matrix":
@@ -229,7 +262,41 @@ class Matrix:
 
     def __repr__(self):
         return "\n".join(str(x) for x in self)
+        
+    def __abs__(self) -> "Matrix":
+        return Matrix([abs(v) for v in self])
+
+    def sum(self) -> float:
+        return sum(v.sum() for v in self)
 
     def hadamard(self, other) -> "Matrix":
         return self._element_wise_operation(self, other, operator.mul)
+
+    def convolve(self, kernel: "Matrix", stride: tuple[int, int] = (1, 1)) -> "Vector | Matrix":
+        n_rows, n_cols = self.shape[0] - kernel.shape[0] + 1, self.shape[1] - kernel.shape[1] + 1
+        f = [[0 for _ in range(n_cols)] for _ in range(n_rows)]
+
+        for i, j in cartprod(range(n_rows), range(n_cols)):
+            for x, y in cartprod(range(kernel.shape[0]), range(kernel.shape[1])):
+                f[i][j] += self[i*stride[0] + x][j*stride[1] + y] * kernel[x][y]
+
+        return Matrix(f)
+    
+    def pad(self, n: int, val: float = 0.0) -> "Matrix":
+        _, n_cols = self.shape
+        
+        return Matrix([Vector.filled(val, n_cols + n*2)] * n +
+                      [v.pad(n, val) for v in self] +
+                      [Vector.filled(val, n_cols + n*2)] * n)
+
+
+if __name__ == "__main__":
+    m1 = Matrix([[1, 2, 3], 
+                 [4, 5, 6], 
+                 [7, 8, 9]])
+    m2 = Matrix([[10, 11], [12, 13]])
+
+    print(m1.convolve(m2))
+
+    print(m2.pad(2))
 
