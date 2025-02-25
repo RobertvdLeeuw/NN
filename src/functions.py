@@ -7,11 +7,40 @@ class Function:
     func: callable
     deriv: callable
 
-    def compute(self, data: Vector) -> Vector:
-        return Vector([self.func(x) for x in data])
+    def compute(self, data):
+        match data:
+            case list():
+                return [self.compute(x) for x in data]
+
+            case Matrix():
+                return Matrix([self.compute(v) for v in data])
+
+            case Vector():
+                return Vector([self.func(x) for x in data])
+
+            case float():
+                return self.func(x)
+
+            case _:
+                raise TypeError(f"Unexpected type for function ({type(data)}): {data}")
+        
 
     def compute_deriv(self, data: Vector) -> Vector:
-        return Vector([self.deriv(x) for x in data])
+        match data:
+            case list():
+                return [self.compute_deriv(x) for x in data]
+
+            case Matrix():
+                return Matrix([self.compute_deriv(v) for v in data])
+
+            case Vector():
+                return Vector([self.deriv(x) for x in data])
+
+            case float():
+                return self.deriv(x)
+
+            case _:
+                raise TypeError(f"Unexpected type for function ({type(data)}): {data}")
 
 
 ReLU = Function(name="ReLU",

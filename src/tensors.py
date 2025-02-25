@@ -2,8 +2,17 @@ import operator
 from random import random
 
 
-def cartprod(x, y):
-    return [(a, b) for a in x for b in y]
+def cartprod(*lists):
+    if len(lists) < 2:
+        return lists
+
+    x, y = lists.pop(), lists.pop()
+    cp = [(a, b) for a in x for b in y]
+    
+    if len(lists) == 2:   
+        return cp
+
+    return cartprod(cp, *lists)
 
 
 def length_check(func):
@@ -29,12 +38,13 @@ def round_number(x: float, n_digits: int) -> str:
     
 
 class Vector:
-    __slots__ = ['values', '_len']
+    __slots__ = ['values', '_len', 'shape']
     n_digits_clamp = 4
 
     def __init__(self, values: list):
         self.values = values
         self._len = len(values)
+        self.shape = (1, self._len)
 
     def __len__(self) -> int:
         return self._len
@@ -214,7 +224,7 @@ class Matrix:
 
     @staticmethod
     def filled(val: float, n_rows: int, n_cols: int) -> "Matrix":
-        return Matrix([Vector([val] * n_cols)] * n_rows)
+        return Matrix([Vector.filled(val, n_cols)] * n_rows)
 
     @shape_check
     def _element_wise_operation(self, other, operand) -> "Matrix":
@@ -271,14 +281,30 @@ class Matrix:
 
     def hadamard(self, other) -> "Matrix":
         return self._element_wise_operation(self, other, operator.mul)
+        
+    def flatten(self) -> Vector:
+        return Vector([x for x in v for v in self])
 
-    def convolve(self, kernel: "Matrix", stride: tuple[int, int] = (1, 1)) -> "Vector | Matrix":
+    def convolve(self, kernel: "Matrix", stride: tuple[int, int] = (1, 1)) -> "Matrix":
         n_rows, n_cols = self.shape[0] - kernel.shape[0] + 1, self.shape[1] - kernel.shape[1] + 1
         f = [[0 for _ in range(n_cols)] for _ in range(n_rows)]
 
         for i, j in cartprod(range(n_rows), range(n_cols)):
             for x, y in cartprod(range(kernel.shape[0]), range(kernel.shape[1])):
                 f[i][j] += self[i*stride[0] + x][j*stride[1] + y] * kernel[x][y]
+
+        return Matrix(f)
+    
+    def max_convolve(self, window: tuple[int, int]) -> "Matrix":
+        n_rows, n_cols = self.shape[0] - window[0] + 1, self.shape[1] - window[1] + 1
+        f = [[None for _ in range(n_cols)] for _ in range(n_rows)]
+
+        for i, j in cartprod(range(n_rows), range(n_cols)):
+            for x, y in cartprod(range(window[0]), range(window[1])):
+                if not f[i][j]:
+                    f[i][j] = self[i*window[0] + x][j*window[1] + y]
+                else:
+                    f[i][j] = max(f[i][j], self[i*window[0] + x][j*window[1] + y])
 
         return Matrix(f)
     

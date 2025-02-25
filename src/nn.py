@@ -10,8 +10,10 @@ from tensors import Matrix, Vector
 
 
 class NN:
-    def __init__(self, layers: list[Layer], /, alpha: float, endlabels: list = None):
-        self.layers = layers
+    def __init__(self, shape_in: tuple[int], /, alpha: float, endlabels: list = None):
+        self.shape_in = shape_in
+        self.layers = []
+
         self.alpha = alpha
         
         self.MSEs = []
@@ -20,14 +22,29 @@ class NN:
 
         self._epoch_counter = 0
 
-        self.endlabels = endlabels
-        if endlabels and len(endlabels) != layer_sizes[-1]:
-            raise Exception("Number of endlabels doesn't match length of output layer.")
+        self.endlabels = None
+        self.baked = False
 
-    def __repr__(self):
-        weights_str = "\n".join(f"{w}\n" for w in self.weights)
-        biases_str = "\n".join(f"{b}\n" for b in self.biases)
-        return f"Weights:\n{weights_str}\n\nBiases:\n{biases_str}\n"
+    def add_layer(self, layer: Layer, *args, **kwargs) -> "NN":
+        prev_shape_out = self.shape_in if not self.layers else self.layers[-1].shape_out
+        new_layer = layer(prev_shape_out, *args, **kwargs)
+
+        self.layers.append(new_layer)
+        self.baked = False
+
+        return self  # For chaining.
+
+    def bake(self, endlabels: list = None) -> "NN":  # Final settings upon model building completion.
+        self.layers[-1].last = True  # Needed for proper GD formula selection.
+
+        if endlabels:
+            if len(endlabels) != self.layers[-1].shape_out:
+                raise Exception("Number of endlabels doesn't match length of output layer.")
+                    
+            self.endlabels = endlabels
+
+        self.baked = True
+        return self
 
     def train(self, features: list[Vector], labels: list[Vector], eval_func: callable = None, interval_k: int = 1000) -> dict:
         self.MSEs = []
@@ -45,6 +62,9 @@ class NN:
                 print(f"Training at {self._epoch_counter} epochs.")
 
     def predict(self, features: Vector) -> Vector | dict:
+        if not self.baked:
+            raise Exception("Model isn't baked (call nn.bake() after adding all layers).")
+
         out = reduce(lambda prev, l: l.predict(prev), self.layers, features)
         return dict(zip(self.endlabels, out)) if self.endlabels else out
 
@@ -52,14 +72,14 @@ class NN:
         if eval_func:
             A = self.layers[-1].A
             last_out = dict(zip(self.endlabels, A)) if self.endlabels else A
-            self.corrects.append(eval_func(last_out, labels) * 100)  # *100 so mean/moving avg becomes % correct.
+            
+            self.corrects.append(eval_func(last_out, labels) * 100)
+            # *100 so mean/moving avg becomes % correct.
         
         e = self.layers[-1].A - labels
         self.MAEs.append(abs(e).sum())
         self.MSEs.append((e * e.transpose()).unwrap())
         
-
-        # TODO: NO REDUCE HERE!! >:(
         reduce(lambda next, l: l.backprop(next), reversed(self.layers), labels)
         reduce(lambda prev, l: l.gd(prev, self.alpha, n), self.layers, labels)
 
@@ -69,7 +89,7 @@ class NN:
               f"    n_layers: {len(self.layers)}\n\n" \
                " - Layers ----------------------------------\n"
         
-        for i, l in enumerate(self.layers):
+        for i, l in enumerate(self.layers, start=1):
             text += f" {i} " + repr(l)
         text += "============================================"
 
@@ -77,15 +97,16 @@ class NN:
 
 
 if __name__ == "__main__":
-    random_seed = 2
-    layers = [DenseLayer(2, 3, ReLU, param_default_val=0.5), 
-              DenseLayer(3, 1, Sigmoid, param_default_val=0.5, last=True)]
-
-    nn = NN(layers, alpha=0.1)
-
     X = Vector([0.5, 0.8])
     Y = Vector([0.4])
+
+    random_seed = 2
+    nn = (NN(X.shape, alpha=0.1)
+          .add_layer(DenseLayer, 3, ReLU, param_default_val=0.5)
+          .add_layer(DenseLayer, 1, Sigmoid, param_default_val=0.5)
+          .bake())
 
     nn.predict(X)
     nn.correct(Y, 1)
     print(nn)
+
